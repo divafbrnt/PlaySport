@@ -77,7 +77,6 @@ fun BookingScreen(
     val dao = remember { AppDatabase.getDatabase(context).bookingDao() }
     val scope = rememberCoroutineScope()
     val modeEdit = bookingId != -1
-    var sedangMenyimpan by remember { mutableStateOf(false) }
 
     // STATE FORM: rememberSaveable agar tidak hilang saat rotasi layar
     var nama by rememberSaveable { mutableStateOf("") }
@@ -168,7 +167,7 @@ fun BookingScreen(
         )
         OutlinedTextField(
             value = jamMulai,
-            onValueChange = { jamMulai = it; jamError = null },
+            onValueChange = { jamMulai = it; jamError = null; durasiError = null },
             label = { Text("Jam Mulai (7 - 21)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             isError = jamError != null,
@@ -202,7 +201,6 @@ fun BookingScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 modifier = Modifier.weight(1f),
-                enabled = !sedangMenyimpan && sudahDimuat,
                 onClick = {
                     // ---------- VALIDASI CLIENT-SIDE ----------
                     var valid = true
@@ -218,14 +216,11 @@ fun BookingScreen(
                     }
 
                     // Defensive: parse tanggal aman, tidak boleh tanggal lampau
-                    val tanggalSesuaiFormat = tanggal.trim().matches(Regex("^\\d{2}/\\d{2}/\\d{4}$"))
-                    val tgl: Date? = if (tanggalSesuaiFormat) {
-                        try {
-                            fmt.parse(tanggal.trim())
-                        } catch (e: ParseException) {
-                            null
-                        }
-                    } else null
+                    val tgl: Date? = try {
+                        fmt.parse(tanggal.trim())
+                    } catch (e: ParseException) {
+                        null
+                    }
                     val hariIni: Date? = fmt.parse(fmt.format(Date()))
                     if (tgl == null) {
                         tanggalError = "Format tanggal harus dd/MM/yyyy!"; valid = false
@@ -253,52 +248,43 @@ fun BookingScreen(
                     val noHpFinal = noHp.trim()
                     val totalFinal = lapangan.hargaPerJam * dur
 
-                    sedangMenyimpan = true
                     scope.launch {
-                        try {
-                            // Jalankan cek bentrok dan penyimpanan di worker thread.
-                            val berhasil = withContext(Dispatchers.IO) {
-                                val bentrok = dao.hitungBentrok(
-                                    lapangan.id, tanggalFinal, jam, jam + dur,
-                                    if (modeEdit) bookingId else -1
-                                )
-                                if (bentrok > 0) {
-                                    false
-                                } else {
-                                    val data = BookingEntity(
-                                        id = if (modeEdit) bookingId else 0,
-                                        lapanganId = lapangan.id,
-                                        namaLapangan = lapangan.nama,
-                                        namaPemesan = namaFinal,
-                                        noHp = noHpFinal,
-                                        tanggal = tanggalFinal,
-                                        jamMulai = jam,
-                                        durasi = dur,
-                                        totalHarga = totalFinal
-                                    )
-                                    if (modeEdit) dao.updateBooking(data) else dao.insertBooking(data)
-                                    true
-                                }
-                            }
-                            if (!berhasil) {
-                                jamError = "Slot sudah terisi pada jam tersebut!"
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    if (modeEdit) "Booking diperbarui" else "Booking berhasil",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                onSelesai()
-                            }
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Gagal menyimpan: ${e.localizedMessage ?: "kesalahan database"}", Toast.LENGTH_LONG).show()
-                        } finally {
-                            sedangMenyimpan = false
+                        // Cek slot bentrok (di background thread)
+                        val bentrok = withContext(Dispatchers.IO) {
+                            dao.hitungBentrok(
+                                lapangan.id, tanggalFinal, jam, jam + dur,
+                                if (modeEdit) bookingId else -1
+                            )
                         }
+                        if (bentrok > 0) {
+                            jamError = "Slot sudah terisi pada jam tersebut!"
+                            return@launch
+                        }
+
+                        withContext(Dispatchers.IO) {
+                            val data = BookingEntity(
+                                id = if (modeEdit) bookingId else 0,
+                                lapanganId = lapangan.id,
+                                namaLapangan = lapangan.nama,
+                                namaPemesan = namaFinal,
+                                noHp = noHpFinal,
+                                tanggal = tanggalFinal,
+                                jamMulai = jam,
+                                durasi = dur,
+                                totalHarga = totalFinal
+                            )
+                            if (modeEdit) dao.updateBooking(data) else dao.insertBooking(data)
+                        }
+                        Toast.makeText(
+                            context,
+                            if (modeEdit) "Booking diperbarui" else "Booking berhasil",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        onSelesai()
                     }
                 }
             ) {
-                Text(if (sedangMenyimpan) "Menyimpan..." else if (modeEdit) "Perbarui Booking" else "Simpan Booking")
+                Text(if (modeEdit) "Perbarui Booking" else "Simpan Booking")
             }
             OutlinedButton(onClick = onSelesai) { Text("Batal") }
         }

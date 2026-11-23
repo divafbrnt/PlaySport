@@ -1,12 +1,12 @@
 package com.example.playsport
 
+import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,7 +17,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -26,13 +25,30 @@ import androidx.compose.ui.unit.sp
 import com.example.playsport.ui.theme.PlaySportTheme
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        const val EXTRA_NAMA = "extra_nama"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Defensive: kalau dibuka tanpa login, kembalikan ke LoginActivity
+        val namaUser = intent.getStringExtra(EXTRA_NAMA)
+        if (namaUser == null) {
+            startActivity(Intent(this, LoginActivity::class.java))
+            finish()
+            return
+        }
+
         setContent {
             PlaySportTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    DaftarLapanganScreen(modifier = Modifier.padding(innerPadding))
+                    DaftarLapanganScreen(
+                        namaUser = namaUser,
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }
@@ -40,7 +56,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun DaftarLapanganScreen(modifier: Modifier = Modifier) {
+fun DaftarLapanganScreen(namaUser: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val jenisList = listOf("Semua") + DataLapangan.daftar.map { it.jenis }.distinct()
 
@@ -70,6 +86,18 @@ fun DaftarLapanganScreen(modifier: Modifier = Modifier) {
             Button(onClick = {
                 context.startActivity(Intent(context, RiwayatActivity::class.java))
             }) { Text("Booking Saya") }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Halo, $namaUser", fontSize = 14.sp)
+            TextButton(onClick = {
+                context.startActivity(Intent(context, LoginActivity::class.java))
+                (context as? Activity)?.finish()
+            }) { Text("Logout", color = MaterialTheme.colorScheme.error) }
         }
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -110,23 +138,14 @@ fun LapanganCard(lapangan: Lapangan, onBooking: () -> Unit) {
         )
     ) {
         Column {
-            // Box menumpuk gambar dari drawable dan label jenis olahraga.
-            Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
-                Image(
-                    painter = painterResource(id = lapangan.gambar),
-                    contentDescription = lapangan.nama,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-                Text(
-                    text = lapangan.jenis,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .background(Color(0xB8000000))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
+            Image(
+                painter = painterResource(id = lapangan.gambar),
+                contentDescription = lapangan.nama,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+            )
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
