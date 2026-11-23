@@ -1,0 +1,10 @@
+# File konfigurasi lokal / hasil build tidak perlu diunggah ke GitHub.
+.gradle/
+.kotlin/
+.idea/
+local.properties
+**/build/
+*.iml
+/captures/
+.DS_Store
+Thumbs.db
